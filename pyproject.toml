@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openai-lib"
+description = "A library for working with OpenAI's Responses API"
+requires-python = ">= 3.12"
+dynamic = ["version"]
+dependencies = [
+  "openai",
+  "tiktoken",
+  "pyyaml"
+]
+authors = [
+  {name = "Nishad Prakash"}
+]
+license = "BSD-3-Clause" 
+license-files = ["LICENSE"]
+keywords = ["openAI", "wrapper", "library"]
+
