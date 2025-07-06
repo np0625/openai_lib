@@ -83,6 +83,32 @@ class OpenAIClient:
         )
         return self._client.batches.retrieve(batch.id)
 
+    # `Params` is expected to contain a `tools` entry for this loop to be meaningful.
+    def run_as_loop(self, orig_input: str | dict, params: dict, funcaller: callable, max_turns: int = 10):
+        if isinstance(orig_input, dict):
+            orig_input = [orig_input]
+
+        input = orig_input
+        prev_resp_id = None
+        counter = 0
+        while counter < max_turns:
+            counter += 1
+            resp = self._client.responses.create(**params, input=input, previous_response_id=prev_resp_id)
+            prev_resp_id = resp.id
+            for elem in resp.output:
+                if elem.type == 'message':
+                    return resp
+                elif elem.type == 'function_call':
+                    fun_call_res = funcaller(elem.name, elem.arguments)
+                    input = [{
+                        'type': 'function_call_output',
+                        'call_id': elem.call_id,
+                        'output': fun_call_res
+                    }]
+                else:
+                    pass
+
+        raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
 
 
 """
@@ -182,4 +208,3 @@ Responses request:
     ]
 }
 """
-
