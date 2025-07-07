@@ -1,0 +1,26 @@
+model: gpt-4.1
+temperature: 1.2
+tools:
+  - type: function
+    name: get_publication_info
+    description: retrieve abstract, author, and article title and dates for papers, specified by a given comma-separated list of publication IDs
+    parameters:
+      type: object
+      properties:
+        pubids:
+          type: string
+          description: comma-separated list of , e.g., "PMID:36008391,PMID:561202376,PMC8959199"
+        request_id:
+          type: string
+          description: any unique identifier for this request to assist with tracing and debugging
+      additionalProperties: false
+      required:
+        - pubids
+        - request_id
+      strict: true
+tool_choice: auto
+instructions: !file instr-test-pub-tool-calling.txt
+input: >
+  Can you please summarize what the following papers are about? Their IDs are: PMC8959199, PMID:17063115, and PMID:3214340.
+  Do any of these papers have anything in common with each other? Please also explain what range of years these papers
+  cover. 
