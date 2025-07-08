@@ -95,16 +95,17 @@ class OpenAIClient:
             counter += 1
             resp = self._client.responses.create(**params, input=input, previous_response_id=prev_resp_id)
             prev_resp_id = resp.id
+            input = []
             for elem in resp.output:
                 if elem.type == 'message':
                     return resp
                 elif elem.type == 'function_call':
                     fun_call_res = funcaller(elem.name, elem.arguments)
-                    input = [{
+                    input.append({
                         'type': 'function_call_output',
                         'call_id': elem.call_id,
                         'output': fun_call_res
-                    }]
+                    })
                 else:
                     pass
 
