@@ -1,8 +1,9 @@
-from openai_lib import OpenAIClient, expand_yaml_template
 import os
 import json
+import asyncio
 import urllib.request
 import urllib.parse
+from openai_lib import OpenAIClient, expand_yaml_template
 
 secret = os.environ['OPENAI_KEY']
 
@@ -29,13 +30,28 @@ def fun_caller(name, args):
     return json.dumps(res)
 
 
-# Test run_as_loop along with the YAML template reading
-print("*** *** *** Load template *** *** ***")
-q = expand_yaml_template('tests/tool-call.yaml', ('instructions','tools'))
-print(q)
+async def main():
+    client = OpenAIClient(secret)
 
-print("*** *** *** Run as loop *** *** ***")
-orig_input = q['input']
-del(q['input'])
-res = client.run_as_loop(orig_input, q, fun_caller)
-print(res)
+    # Example: run_as_batch (kept commented but shows usage)
+    # test_batch_query = {
+    #     'model': 'gpt-4o',
+    #     'instructions': 'You have a wry, dry, erudite British sense of humor',
+    #     'input': 'Tell me a funny story with a sharp punchline',
+    # }
+    # res = await client.run_as_batch(test_batch_query, 'batch-test', {'purpose': 'testing'})
+    # print(res)
+
+    print("*** *** *** Load template *** *** ***")
+    q = expand_yaml_template('tests/tool-call.yaml', ('instructions', 'tools'))
+    print(q)
+
+    print("*** *** *** Run as loop *** *** ***")
+    orig_input = q['input']
+    del q['input']
+    res = await client.run_as_loop(orig_input, q, fun_caller)
+    print(res)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

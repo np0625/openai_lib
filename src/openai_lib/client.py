@@ -3,18 +3,20 @@ import tiktoken
 import math
 import io
 import json
+from collections.abc import Callable
+
 
 class OpenAIClient:
 
     BATCH_ENDPOINT = '/v1/responses'
 
-    def __init__(self, key:str, config:dict = {}):
-        self._client = openai.OpenAI(api_key=key)
+    def __init__(self, key: str, config: dict = {}):
+        self._client = openai.AsyncOpenAI(api_key=key)
         default_responsesAPI_configs = {
             "model": "gpt-4o",
             "max_output_tokens": 8192,
             "store": False,
-            "user": "my-api-client"
+            "user": "my-api-client",
         }
         self.responsesAPI_configs = {**default_responsesAPI_configs, **config}
 
@@ -22,86 +24,96 @@ class OpenAIClient:
     def __getattr__(self, name):
         return getattr(self._client, name)
 
-    def upload_file(self, file, purpose='batch'):
-        return self._client.files.create(
-            file = open(file, 'rb'),
-            purpose = purpose
-        )
+    async def upload_file(self, file: str, purpose: str = 'batch'):
+        with open(file, 'rb') as fh:
+            return await self._client.files.create(file=fh, purpose=purpose)
 
-    def list_files(self):
-        return self._client.files.list()
+    async def list_files(self):
+        return await self._client.files.list()
 
-    def list_batches(self, mode='all'):
-        batches = self._client.batches.list()
+    async def get_file(self, id: str):
+        return await self._client.files.retrieve(id)
+
+    async def get_file_content(self, id: str):
+        return await self._client.files.content(id)
+
+    async def list_batches(self, mode: str = 'all'):
+        batches = await self._client.batches.list()
         retval = {}
         for b in batches.data:
             if mode == 'all' or b.status != 'completed':
-                if b.status not in retval:
-                    retval[b.status] = []
-                retval[b.status].append(b.to_dict())
+                retval.setdefault(b.status, []).append(b.to_dict())
         return retval
 
-    def get_file(self, id):
-        return self._client.files.retrieve(id)
+    async def get_batch(self, id: str):
+        return await self._client.batches.retrieve(id)
 
-    def get_batch(self, id):
-        return self._client.batches.retrieve(id)
+    async def get_model_list(self):
+        return await self._client.models.list()
 
-    def get_file_content(self, id):
-        return self._client.files.content(id)
-
-    def get_model_list(self) -> dict[str, str]:
-        return self._client.models.list()
-
-    def encoding_for_model_id(self, model_id: str) -> str:
+    def encoding_for_model_id(self, model_id: str):
         return tiktoken.encoding_for_model(model_id)
 
-    def submit_responsesAPI_request(self, input: list, config: dict={}) -> dict:
-        # print(input)
+    async def submit_responsesAPI_request(self, input: list, config: dict = {}):
         payload = {**self.responsesAPI_configs, **config, "input": input}
-        return self._client.responses.create(**payload)
+        return await self._client.responses.create(**payload)
 
-
-    def run_as_batch(self, requests: dict | list[dict], custom_id_prefix: str, metadata: dict = {}) -> dict:
+    async def run_as_batch(
+        self,
+        requests: dict | list[dict],
+        custom_id_prefix: str,
+        metadata: dict = {},
+    ):
         if isinstance(requests, dict):
             requests = [requests]
+
         pad = int(math.log10(len(requests))) + 1
         batch_input_data = [{
-            'body': r,
-            'method': 'POST',
-            'url': self.BATCH_ENDPOINT,
-            'custom_id': f"{custom_id_prefix}-{str(i+1).zfill(pad)}"
-            } for i, r in enumerate(requests)]
-        batch_input_data = io.BytesIO("\n".join([json.dumps(b) for b in batch_input_data]).encode())
+                'body': r,
+                'method': 'POST',
+                'url': self.BATCH_ENDPOINT,
+                'custom_id': f"{custom_id_prefix}-{str(i + 1).zfill(pad)}",
+            } for i, r in enumerate(requests)
+        ]
+
+        batch_input_bytes = io.BytesIO("\n".join([json.dumps(b) for b in batch_input_data]).encode())
         # This is not a real File object, but the API accepts it. The filename gets recorded as 'upload'
-        batch_file = self._client.files.create(file=batch_input_data, purpose="batch")
-        batch = self._client.batches.create(
-            input_file_id = batch_file.id,
-            endpoint = self.BATCH_ENDPOINT,
-            completion_window = '24h',
-            metadata = metadata
+        batch_file = await self._client.files.create(file=batch_input_bytes, purpose="batch")
+        batch = await self._client.batches.create(
+            input_file_id=batch_file.id,
+            endpoint=self.BATCH_ENDPOINT,
+            completion_window='24h',
+            metadata=metadata,
         )
-        return self._client.batches.retrieve(batch.id)
+        return await self._client.batches.retrieve(batch.id)
 
     # `Params` is expected to contain a `tools` entry for this loop to be meaningful.
-    def run_as_loop(self, orig_input: str | dict, params: dict, funcaller: callable, max_turns: int = 10):
+    async def run_as_loop(
+        self,
+        orig_input: str | dict,
+        params: dict,
+        funcaller: Callable,
+        max_turns: int = 10,
+    ):
         if isinstance(orig_input, dict):
             orig_input = [orig_input]
 
-        input = orig_input
+        input_data = orig_input
         prev_resp_id = None
         counter = 0
+
         while counter < max_turns:
             counter += 1
-            resp = self._client.responses.create(**params, input=input, previous_response_id=prev_resp_id)
+            resp = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
             prev_resp_id = resp.id
-            input = []
+            input_data = []
+
             for elem in resp.output:
                 if elem.type == 'message':
                     return resp
                 elif elem.type == 'function_call':
                     fun_call_res = funcaller(elem.name, elem.arguments)
-                    input.append({
+                    input_data.append({
                         'type': 'function_call_output',
                         'call_id': elem.call_id,
                         'output': fun_call_res
