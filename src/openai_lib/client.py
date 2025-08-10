@@ -122,6 +122,11 @@ class OpenAIClient:
 
         raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
 
+
+    # WARNING: this function doesn't really support interleaved responses. The chunk collection
+    # counters assume that one type of delta response will complete before we see output for
+    # a different output type. To fix this, we need counters to be specific to the output_index
+    # or the item_id (as we've chosen). TODO!
     async def run_as_loop_streaming(
         self,
         orig_input: str | dict,
@@ -143,25 +148,29 @@ class OpenAIClient:
             # print(event)
             etype = event.type
             if etype == 'response.output_item.added':
-                if event.item.type == 'message':
+                if event.item.type in ('message', 'reasoning'):
                     text_chunks_collected = 0
-                    text_streams[event.item.id] = ''
+                    text_streams[event.item.id] = {
+                        'type': event.item.type,
+                        'output_text': ''
+                    }
                 else:
                     pass # yield event
-            elif ((etype == 'response.content_part.added' or etype == 'response.output_text.delta')
+            elif (etype in ('response.content_part.added', 'response.output_text.delta',
+                            'response.reasoning_summary_text.delta', 'response.reasoning_summary_part.added')
                 and (event.item_id in text_streams)):
                 # need this 'lazy' evaluation of the fallback
-                text_streams[event.item_id] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
+                text_streams[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
                 text_chunks_collected += 1
                 if text_chunks_collected % 10 == 0:
                     yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
                 else:
                     pass
-            elif etype == 'response.output_text.done':
+            elif etype in ('response.output_text.done', 'response.reasoning_summary_text.done'):
                 # print(event)
                 yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
             else:
-                pass # yield event
+                print(event) # pass # yield event
             #if turns >= max_turns:
             #    raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
             # yield event
