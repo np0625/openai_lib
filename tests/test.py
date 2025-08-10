@@ -34,7 +34,7 @@ async def run_loop(client: OpenAIClient):
     print(res)
     return res
 
-async def run_loop_streaming(client: OpenAIClient, simple=False):
+async def run_loop_streaming_instrumented(client: OpenAIClient, simple=False):
 
     if simple:
         input = """Provide a brief two-paragraph summary of what precision medicine is, suitable
@@ -94,6 +94,37 @@ async def run_loop_streaming(client: OpenAIClient, simple=False):
         "event_runs": event_runs,
     }"""
 
+
+async def run_loop_streaming(client: OpenAIClient, simple=False):
+
+    if simple:
+        input = """Provide a brief two-paragraph summary of what precision medicine is, suitable
+        for a general audience."""
+        q = {
+            'model': 'o3',
+            'reasoning': {
+                'effort': 'high',
+                'summary': 'detailed'
+            }
+        }
+    else:
+        q = expand_yaml_template('tests/tool-call-2.yaml', ('instructions', 'tools'))
+        input = q['input']
+        del q['input']
+
+    event_type_counts = {}
+    event_runs = []  # Track runs of consecutive event types
+    last_event_type = None
+    current_run_count = 0
+
+    async for event in client.run_as_loop_streaming(input, q, fun_caller):
+        if event['type'] in ('message', 'reasoning'):
+            print(f"{event['type']}: {event['output_text']}")
+        else:
+            print(event)
+
+
+
 async def main():
     """Entry point that dispatches to individual client methods based on CLI flags."""
     parser = argparse.ArgumentParser(description="OpenAIClient test harness")
@@ -126,7 +157,7 @@ async def main():
     elif args.rl:
         res = await run_loop(client)
     elif args.rls:
-        res = await run_loop_streaming(client, True)
+        res = await run_loop_streaming(client, False)
     else:
         # This should be impossible because of mutually exclusive group + required=True
         parser.error("No valid operation specified.")

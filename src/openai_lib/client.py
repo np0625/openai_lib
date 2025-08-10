@@ -129,39 +129,41 @@ class OpenAIClient:
     # or the item_id (as we've chosen). TODO!
     async def run_as_loop_streaming(
         self,
-        orig_input: str | dict,
+        orig_input: str | dict | list,
         params: dict,
         funcaller: Callable,
+        turn: int = 1,
+        previous_response_id = None,
         max_turns: int = 10,
-        text_chunk: int = 10
+        text_chunk: int = 10,
     ):
         if isinstance(orig_input, dict):
             orig_input = [orig_input]
         input_data = orig_input
-        prev_resp_id = None
-        turns = 0
         params['stream'] = True
         collections = {}
-        text_chunks_collected = 0
-        stream = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
+        function_outputs = []
+        stream = await self._client.responses.create(**params, input=input_data, previous_response_id=previous_response_id)
         async for event in stream:
             # print(event)
             etype = event.type
-            if etype == 'response.output_item.added':
+            if etype == 'response.created':
+                previous_response_id = event.response.id
+                print(previous_response_id)
+            elif etype == 'response.output_item.added':
                 # Note event.item.id in here, but event.item_id in other clauses
                 if event.item.type in ('message', 'reasoning'):
-                    text_chunks_collected = 0
                     collections[event.item.id] = {
                         'type': event.item.type,
                         'output_text': '',
                         'n_chunks': 0
                     }
-                elif event.item.type == 'function_call':
-                    collections[event.item.id] = {
-                        'type': 'function_call',
-                        'name': event.item.name,
-                        'arguments': None
-                    }
+                #elif event.item.type == 'function_call':
+                #    collections[event.item.id] = {
+                #        'type': 'function_call',
+                #        'name': event.item.name,
+                #        'arguments': None
+                #    }
                 else:
                     pass # yield event
             elif (etype in ('response.content_part.added', 'response.output_text.delta',
@@ -171,20 +173,31 @@ class OpenAIClient:
                 collections[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
                 collections[event.item_id]['n_chunks'] += 1
                 if collections[event.item_id]['n_chunks'] % 10 == 0:
-                    yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {collections[event.item_id]}"
+                    yield collections[event.item_id]
                 else:
                     pass
             elif etype in ('response.output_text.done', 'response.reasoning_summary_text.done'):
                 # print(event)
-                yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {collections[event.item_id]}"
+                yield collections[event.item_id]
+            elif etype == 'response.output_item.done' and event.item.type == 'function_call':
+                fun_call_res = funcaller(event.item.name, event.item.arguments)
+                function_outputs.append({
+                    'type': 'function_call_output',
+                    'call_id': event.item.call_id,
+                    'output': fun_call_res
+                })
+                yield {'type': 'function_calls', 'outputs': function_outputs}
             else:
-                print(event) # pass # yield event
-            #if turns >= max_turns:
-            #    raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
-            # yield event
+                pass
 
-
-
+        if len(function_outputs) > 0:
+            if turn >= max_turns:
+                raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
+            else:
+                # Continue streaming the next turn, propagating the captured response id
+                async for event in self.run_as_loop_streaming(function_outputs, params, funcaller, turn + 1,
+                    previous_response_id, max_turns, text_chunk):
+                    yield event
 
 """
 Responses request:
