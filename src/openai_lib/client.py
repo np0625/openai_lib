@@ -144,45 +144,48 @@ class OpenAIClient:
             # print(event)
             etype = event.type
             if etype == 'response.created':
+                # Only the initial few events will contain the response id; grab it for prev_resp_id if needed
                 previous_response_id = event.response.id
-                print(previous_response_id)
+                # print(previous_response_id)
             elif etype == 'response.output_item.added':
                 # Note event.item.id in here, but event.item_id in other clauses
+                # In this clause, we check for and initialize textual outputs, for now restricted to reasoning
+                # summaries and the final message
                 if event.item.type in ('message', 'reasoning'):
                     collections[event.item.id] = {
                         'type': event.item.type,
                         'output_text': '',
-                        'n_chunks': 0
+                        'n_chunks': 0,
+                        'done': False
                     }
-                #elif event.item.type == 'function_call':
-                #    collections[event.item.id] = {
-                #        'type': 'function_call',
-                #        'name': event.item.name,
-                #        'arguments': None
-                #    }
                 else:
-                    pass # yield event
+                    pass
             elif (etype in ('response.content_part.added', 'response.output_text.delta',
                             'response.reasoning_summary_text.delta', 'response.reasoning_summary_part.added')
                 and (event.item_id in collections)):
+                # Here we collect the initial and delta values for the textual outputs of interest
                 # need this 'lazy' evaluation of the fallback
                 collections[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
                 collections[event.item_id]['n_chunks'] += 1
-                if collections[event.item_id]['n_chunks'] % 10 == 0:
+                # If we've collected #chunk pieces of output, yield them
+                if collections[event.item_id]['n_chunks'] % text_chunk == 0:
                     yield collections[event.item_id]
                 else:
                     pass
             elif etype in ('response.output_text.done', 'response.reasoning_summary_text.done'):
-                # print(event)
+                # Yield the completed textual output
+                collections[event.item_id]['done'] = True
                 yield collections[event.item_id]
             elif etype == 'response.output_item.done' and event.item.type == 'function_call':
+                # Here we collect the output of any function calls that the model requests.
+                # Note that with parallel_tool_calls=True by default, a single response may
+                # request multiple function calls
                 fun_call_res = await funcaller(event.item.name, event.item.arguments)
                 function_outputs.append({
                     'type': 'function_call_output',
                     'call_id': event.item.call_id,
                     'output': fun_call_res
                 })
-                yield {'type': 'function_calls', 'outputs': function_outputs}
             else:
                 pass
 
@@ -190,7 +193,9 @@ class OpenAIClient:
             if turn >= max_turns:
                 raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
             else:
-                # Continue streaming the next turn, propagating the captured response id
+                yield({'type': 'function_call_outputs', 'outputs': function_outputs})
+                # If we're here, continue streaming by restarting the generation with prev_response_id + function
+                # call outputs as the input.
                 async for event in self.run_as_loop_streaming(function_outputs, params, funcaller, turn + 1,
                     previous_response_id, max_turns, text_chunk):
                     yield event
