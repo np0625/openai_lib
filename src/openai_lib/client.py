@@ -163,7 +163,9 @@ class OpenAIClient:
             elif (etype in ('response.content_part.added', 'response.output_text.delta',
                             'response.reasoning_summary_text.delta', 'response.reasoning_summary_part.added')
                 and (event.item_id in collections)):
-                # Here we collect the initial and delta values for the textual outputs of interest
+                # Here we collect the initial and delta values for the textual outputs of interest, yielding
+                # back chunks when we collect the specified amount.
+
                 # need this 'lazy' evaluation of the fallback
                 collections[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
                 collections[event.item_id]['n_chunks'] += 1
