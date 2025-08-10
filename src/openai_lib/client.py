@@ -141,34 +141,42 @@ class OpenAIClient:
         prev_resp_id = None
         turns = 0
         params['stream'] = True
-        text_streams = {}
+        collections = {}
         text_chunks_collected = 0
         stream = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
         async for event in stream:
             # print(event)
             etype = event.type
             if etype == 'response.output_item.added':
+                # Note event.item.id in here, but event.item_id in other clauses
                 if event.item.type in ('message', 'reasoning'):
                     text_chunks_collected = 0
-                    text_streams[event.item.id] = {
+                    collections[event.item.id] = {
                         'type': event.item.type,
-                        'output_text': ''
+                        'output_text': '',
+                        'n_chunks': 0
+                    }
+                elif event.item.type == 'function_call':
+                    collections[event.item.id] = {
+                        'type': 'function_call',
+                        'name': event.item.name,
+                        'arguments': None
                     }
                 else:
                     pass # yield event
             elif (etype in ('response.content_part.added', 'response.output_text.delta',
                             'response.reasoning_summary_text.delta', 'response.reasoning_summary_part.added')
-                and (event.item_id in text_streams)):
+                and (event.item_id in collections)):
                 # need this 'lazy' evaluation of the fallback
-                text_streams[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
-                text_chunks_collected += 1
-                if text_chunks_collected % 10 == 0:
-                    yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
+                collections[event.item_id]['output_text'] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
+                collections[event.item_id]['n_chunks'] += 1
+                if collections[event.item_id]['n_chunks'] % 10 == 0:
+                    yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {collections[event.item_id]}"
                 else:
                     pass
             elif etype in ('response.output_text.done', 'response.reasoning_summary_text.done'):
                 # print(event)
-                yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
+                yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {collections[event.item_id]}"
             else:
                 print(event) # pass # yield event
             #if turns >= max_turns:
