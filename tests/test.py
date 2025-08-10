@@ -117,9 +117,12 @@ async def run_loop_streaming(client: OpenAIClient, simple=False):
     last_event_type = None
     current_run_count = 0
 
-    async for event in client.run_as_loop_streaming(input, q, fun_caller):
+    async for event in client.run_as_loop_streaming(input, q, fun_caller, 1, None, 10, 100):
         if event['type'] in ('message', 'reasoning'):
-            print(f"{event['type']}: {event['output_text']}")
+            if event['done']:
+                print(f"{event['type']}: {event['output_text']}")
+            else:
+                pass
         else:
             print(event)
 
