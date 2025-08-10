@@ -1,5 +1,7 @@
 import yaml
 import os
+import sys
+import argparse
 
 def _read_file_contents(file_path, base_dir=None):
     """Helper function to read file contents, handling relative paths."""
@@ -56,3 +58,50 @@ def expand_yaml_template(yaml_path, required_fields=('instructions', 'data')):
     # Return all fields with their original data types preserved
     # The !file constructor already handles converting file references to strings
     return template
+
+
+def _parse_required_fields(arg_value: str | None):
+    if not arg_value:
+        return None
+    fields = [field.strip() for field in arg_value.split(',') if field.strip()]
+    return tuple(fields)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Expand a YAML template (supports !file) and print YAML to stdout"
+    )
+    parser.add_argument(
+        "yaml_path",
+        help="Path to the YAML template file",
+    )
+    parser.add_argument(
+        "-r",
+        "--required-fields",
+        dest="required_fields",
+        help=(
+            "Comma-separated list of required field names. "
+            "If omitted, defaults to ('instructions','data')."
+        ),
+    )
+
+    args = parser.parse_args()
+
+    required_fields = _parse_required_fields(args.required_fields)
+
+    try:
+        if required_fields is None:
+            result = expand_yaml_template(args.yaml_path)
+        else:
+            result = expand_yaml_template(args.yaml_path, required_fields)
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # Print YAML text to stdout
+    yaml_text = yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
+    print(yaml_text, end="")
+
+
+if __name__ == "__main__":
+    main()
