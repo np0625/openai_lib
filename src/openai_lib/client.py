@@ -111,7 +111,7 @@ class OpenAIClient:
                 if elem.type == 'message':
                     return resp
                 elif elem.type == 'function_call':
-                    fun_call_res = funcaller(elem.name, elem.arguments)
+                    fun_call_res = await funcaller(elem.name, elem.arguments)
                     input_data.append({
                         'type': 'function_call_output',
                         'call_id': elem.call_id,
@@ -123,10 +123,6 @@ class OpenAIClient:
         raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
 
 
-    # WARNING: this function doesn't really support interleaved responses. The chunk collection
-    # counters assume that one type of delta response will complete before we see output for
-    # a different output type. To fix this, we need counters to be specific to the output_index
-    # or the item_id (as we've chosen). TODO!
     async def run_as_loop_streaming(
         self,
         orig_input: str | dict | list,
@@ -180,7 +176,7 @@ class OpenAIClient:
                 # print(event)
                 yield collections[event.item_id]
             elif etype == 'response.output_item.done' and event.item.type == 'function_call':
-                fun_call_res = funcaller(event.item.name, event.item.arguments)
+                fun_call_res = await funcaller(event.item.name, event.item.arguments)
                 function_outputs.append({
                     'type': 'function_call_output',
                     'call_id': event.item.call_id,

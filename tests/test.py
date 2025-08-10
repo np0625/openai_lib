@@ -11,7 +11,7 @@ from openai_lib import OpenAIClient, expand_yaml_template
 secret = os.environ['OPENAI_KEY']
 
 
-def fun_caller(name, args):
+async def fun_caller(name, args):
     if name != 'get_publication_info':
         raise Exception(f"I know nothing about: {name}")
 
