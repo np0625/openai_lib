@@ -140,14 +140,14 @@ class OpenAIClient:
         text_chunks_collected = 0
         stream = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
         async for event in stream:
-            print(event)
+            # print(event)
             etype = event.type
             if etype == 'response.output_item.added':
                 if event.item.type == 'message':
                     text_chunks_collected = 0
                     text_streams[event.item.id] = ''
                 else:
-                    yield event
+                    pass # yield event
             elif ((etype == 'response.content_part.added' or etype == 'response.output_text.delta')
                 and (event.item_id in text_streams)):
                 # need this 'lazy' evaluation of the fallback
@@ -155,8 +155,13 @@ class OpenAIClient:
                 text_chunks_collected += 1
                 if text_chunks_collected % 10 == 0:
                     yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
+                else:
+                    pass
+            elif etype == 'response.output_text.done':
+                # print(event)
+                yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
             else:
-                yield event
+                pass # yield event
             #if turns >= max_turns:
             #    raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
             # yield event
