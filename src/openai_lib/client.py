@@ -97,13 +97,12 @@ class OpenAIClient:
     ):
         if isinstance(orig_input, dict):
             orig_input = [orig_input]
-
         input_data = orig_input
         prev_resp_id = None
-        counter = 0
+        turns = 0
 
-        while counter < max_turns:
-            counter += 1
+        while turns < max_turns:
+            turns += 1
             resp = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
             prev_resp_id = resp.id
             input_data = []
@@ -122,6 +121,47 @@ class OpenAIClient:
                     pass
 
         raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
+
+    async def run_as_loop_streaming(
+        self,
+        orig_input: str | dict,
+        params: dict,
+        funcaller: Callable,
+        max_turns: int = 10,
+        text_chunk: int = 10
+    ):
+        if isinstance(orig_input, dict):
+            orig_input = [orig_input]
+        input_data = orig_input
+        prev_resp_id = None
+        turns = 0
+        params['stream'] = True
+        text_streams = {}
+        text_chunks_collected = 0
+        stream = await self._client.responses.create(**params, input=input_data, previous_response_id=prev_resp_id)
+        async for event in stream:
+            print(event)
+            etype = event.type
+            if etype == 'response.output_item.added':
+                if event.item.type == 'message':
+                    text_chunks_collected = 0
+                    text_streams[event.item.id] = ''
+                else:
+                    yield event
+            elif ((etype == 'response.content_part.added' or etype == 'response.output_text.delta')
+                and (event.item_id in text_streams)):
+                # need this 'lazy' evaluation of the fallback
+                text_streams[event.item_id] += event.part.text if hasattr(event, "part") else getattr(event, "delta")
+                text_chunks_collected += 1
+                if text_chunks_collected % 10 == 0:
+                    yield f" ^^^^^^^^^^^^^^^^^^^^^^^^^^^ {text_streams[event.item_id]}"
+            else:
+                yield event
+            #if turns >= max_turns:
+            #    raise Exception(f"Tool calling loop exceeded max turns: {max_turns}")
+            # yield event
+
+
 
 
 """

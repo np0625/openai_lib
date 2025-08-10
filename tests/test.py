@@ -28,12 +28,71 @@ async def run_loop(client: OpenAIClient):
     print(q)
 
     print("*** *** *** Run as loop *** *** ***")
-    orig_input = q['input']
+    input = q['input']
     del q['input']
-    res = await client.run_as_loop(orig_input, q, fun_caller)
+    res = await client.run_as_loop(input, q, fun_caller)
     print(res)
     return res
 
+async def run_loop_streaming(client: OpenAIClient, simple=False):
+
+    if simple:
+        input = """Provide a brief two-paragraph summary of what precision medicine is, suitable
+        for a general audience."""
+        q = {
+            'model': 'o3',
+            'reasoning': {
+                'effort': 'high',
+                'summary': 'detailed'
+            }
+        }
+    else:
+        q = expand_yaml_template('tests/tool-call-2.yaml', ('instructions', 'tools'))
+        input = q['input']
+        del q['input']
+
+    event_type_counts = {}
+    event_runs = []  # Track runs of consecutive event types
+    last_event_type = None
+    current_run_count = 0
+
+    async for event in client.run_as_loop_streaming(input, q, fun_caller):
+        #print(event.type)
+        print(event)
+        tname = type(event).__name__
+        event_type_counts[tname] = event_type_counts.get(tname, 0) + 1
+
+        # Track runs of consecutive event types
+        if tname != last_event_type:
+            # End the previous run (if any)
+            if last_event_type is not None:
+                event_runs.append((last_event_type, current_run_count))
+            # Start a new run
+            last_event_type = tname
+            current_run_count = 1
+        else:
+            # Continue the current run
+            current_run_count += 1
+
+    # End the final run
+    if last_event_type is not None:
+        event_runs.append((last_event_type, current_run_count))
+
+    # Print event runs report
+    print("\nEvent runs (in order of occurrence):")
+    for event_type, count in event_runs:
+        print(f"{event_type}: {count}")
+
+    # Print final total counts (ascending by count, then by type name)
+    print("\nFinal event type counts (ascending):")
+    for tname, count in sorted(event_type_counts.items(), key=lambda kv: (kv[1], kv[0])):
+        print(f"{tname}: {count}")
+
+"""    return {
+        "streamed_events": sum(event_type_counts.values()),
+        "event_type_counts": event_type_counts,
+        "event_runs": event_runs,
+    }"""
 
 async def main():
     """Entry point that dispatches to individual client methods based on CLI flags."""
@@ -47,6 +106,7 @@ async def main():
     group.add_argument('--lb', action='store_true', help='List batches')
     group.add_argument('--gm', action='store_true', help='Get model list')
     group.add_argument('--rl', action='store_true', help='Run as loop (tool-calling example)')
+    group.add_argument('--rls', action='store_true', help='Run as loop (streaming example)')
 
     args = parser.parse_args()
 
@@ -65,6 +125,8 @@ async def main():
         res = await client.get_model_list()
     elif args.rl:
         res = await run_loop(client)
+    elif args.rls:
+        res = await run_loop_streaming(client, True)
     else:
         # This should be impossible because of mutually exclusive group + required=True
         parser.error("No valid operation specified.")
