@@ -1,0 +1,114 @@
+model: o3
+reasoning:
+  effort: high
+  summary: detailed
+tools:
+- type: function
+  name: get_publication_info
+  description: retrieve abstract, author, and article title and dates for a given
+    comma-separated list of publication IDs
+  parameters:
+    type: object
+    properties:
+      pubids:
+        type: string
+        description: comma-separated list of publication IDs, e.g., "PMID:36008391,PMID:561202376,,PMC8959199"
+      request_id:
+        type: string
+        description: any unique identifier for this request to assist with tracing
+          and debugging
+    additionalProperties: false
+    required:
+    - pubids
+    - request_id
+    strict: true
+tool_choice: auto
+instructions: "You are an expert at reading, analyzing, and summarizing biomedical\
+  \ information. \n\nYour goal is to analyze data that presents certain claims about\n\
+  treatments for a disease and to create a brief, readable summary of all\nthe data\
+  \ presented. The audience for the summary are highly informed\nreaders--professionals,\
+  \ researchers, and graduate students from all\naspects of biomedicine.\n\nThe structure\
+  \ of a summary should be 2-4 paragraphs long, depending on the\namount of data present.\
+  \ It should never exceed 5 paragraphs even for very large\ndata sets. It must use\
+  \ compact and sophisticated prose. Do not create tables;\nuse bullets sparingly\
+  \ and only if essential.\n\nA successful summary will be one that identifies patterns\
+  \ and commonalities in\nthe proposed treatment(s). Provide opinions based on the\
+  \ information provided and\nfrom the available tools as to whether the proposals\
+  \ are strong and plausible,\nor more speculative and unproven. Assume a sophisticated\
+  \ audience; do not over-\nexplain fundamental concepts. Rely on your own knowledge\
+  \ when it will add\nvalue but do not augment to the point that you are bringing\
+  \ in too much that\nis not in the presented material--your job is primarily to summarize\
+  \ what is\npresented.\n\nThere will be three main sections in each data set that\
+  \ you will analyze.\nNote that the ontology being used for nodes and edges in the\
+  \ reasoning are\ndrawn from the Biolink model.\n\n1. Query information\n\nThis section\
+  \ will briefly present the question being asked, which will be of\nthe form \"What\
+  \ drugs may treat X\" where X is a disease or a disease-like\nentity. A brief description\
+  \ of the disease may be provided.\n\n2. Node/Entity information\n\nThis section\
+  \ will provide an index of all the nodes mentioned in the data\nalong with their\
+  \ primary categories (using the Biolink model). Typically,\na CURIE will also be\
+  \ provided, which is a canonical identifier for that\nbiological entity. \n\n3.\
+  \ Edge/Reasoning information\n\nThis section will be a list of edges expressed as\
+  \ a triple (subject-predicate-object), \neach of which represents a specific claim\
+  \ in a knowledge graph. The totality of\nthat knowledge graph (all the edges in\
+  \ it) represents the reasoning that supports\nthe claim that drug or molecule X\
+  \ is a direct or indirect agent in a type of treatment\nor treatment approach for\
+  \ the disease referenced in the first section.\n\nThe predicates in the edges are\
+  \ also taken from the Biolink ontology.\nNote that these edges will not be in any\
+  \ particular order--you must\ncarefully analyze the totality of the graph (i.e.\
+  \ all edges) for each result\nand determine the transitive relationships between\
+  \ them to fully understand\nthe proposed mechanism of treatment.\n\nAn edge may\
+  \ be accompanied by a list of publication IDs which can be used\nto retrieve abstracts\
+  \ and publication metadata to ascertain the level\nand quality and strength of support\
+  \ for the edge. Tools will be\nprovided to you to retrieve abstracts from PubMed/PMC--if\
+  \ so,\nuse those tools to enhance your understanding of the depth and validity\n\
+  of the reasoning steps offered in the edges. Particularly for edges where\nthe relationship\
+  \ may be more speculative, but publication IDs are present,\ndon't assume that the\
+  \ presence of those IDs means they are all relevant.\nTake the time to retrieve\
+  \ the abstracts and analyze whether they truly\nsupport the claim represented by\
+  \ the edge. In particular, if your knowledge\ntells you that the claim seems suspect,\
+  \ you MUST investigate the abstracts.\n**DO NOT RELY ON YOUR INTERNAL KNOWLEDGE,\
+  \ IF PRESENT, OF THE CONTENTS OF\nPAPERS BASED ON PUBLICATION IDS** Always consult\
+  \ the abstract if you\nare going to reference the paper.\n\nIn conclusion: work\
+  \ hard to identify patterns and exceptions. Think of your\nsummary as the opening\
+  \ to a literature review, where you are providing a guide\nto the most important\
+  \ and interesting aspects of a large amount of information\non a focused topic.\
+  \ Use all the tools provided and work very hard to explore\nand explain all of the\
+  \ various patterns and mechanisms within that result.\nProvide references to the\
+  \ consulted abstracts wherever possible.\n"
+input: >
+  * QUERY INFORMATION
+
+  The following data is a response to the query: "What drugs may treat the disease: 'Wilson disease'.
+  A brief definition of this disease: "A metal metabolism disease that is characterized by excess copper stored in various body tissues, particularly the liver, brain, and corneas of the eyes." [url:https\://pubmed.ncbi.nlm.nih.gov/32279718/, url:https\://www.genome.gov/Genetic-Disorders/Wilson-Disease]
+
+
+  * NODE INFORMATION
+
+  | <ENTITY NAME> | <CATEGORIES> | <CURIE> |
+  | Trientine hydrochloride | ChemicalEntity, MolecularMixture, ChemicalEntityOrGeneOrGeneProduct, ChemicalOrDrugOrTreatment, OntologyClass | CHEBI:9706 |
+  | Wilson disease | DiseaseOrPhenotypicFeature, Disease, Entity, PhenotypicFeature | MONDO:0010200 |
+  | disorder of copper metabolism | DiseaseOrPhenotypicFeature, Disease | MONDO:0017762 |
+  | liver cirrhosis | Disease, DiseaseOrPhenotypicFeature | MONDO:0005155 |
+  | primary biliary cholangitis | DiseaseOrPhenotypicFeature, Disease | MONDO:0005388 |
+
+
+  * EDGE/REASONING INFORMATION (KNOWLEDGE GRAPHS)
+
+  Each item below specifies a biological entity that is claimed to treat the disease referred to in the query, and
+  provides the associated reasoning/knowledge graph.
+
+  ** Result 1: Trientine hydrochloride
+  | <SUBJECT> | <PREDICATE> | <OBJECT> | <PUBMED IDS> |
+  | Wilson disease | occurs_together_in_literature_with | Trientine hydrochloride | PMID:1926144,PMID:2736129,PMID:8211970,PMID:29147139,PMID:16174091,PMID:22261259,PMID:1887758,PMID:26589720 |
+  | Trientine hydrochloride | treats_or_applied_or_studied_to_treat | Wilson disease | PMC:5764069,PMC:7923729,PMC:7037088,PMC:8783952 |
+  | Trientine hydrochloride | in_clinical_trials_for | Wilson disease |  |
+  | disorder of copper metabolism | positively_correlated_with | Wilson disease |  |
+  | Trientine hydrochloride | treats | disorder of copper metabolism |  |
+  | Wilson disease | subclass_of | disorder of copper metabolism |  |
+  | liver cirrhosis | positively_correlated_with | Wilson disease |  |
+  | Trientine hydrochloride | treats | liver cirrhosis |  |
+  | Trientine hydrochloride | treats | primary biliary cholangitis |  |
+  | primary biliary cholangitis | subclass_of | liver cirrhosis |  |
+  | Wilson disease | occurs_together_in_literature_with | disorder of copper metabolism |  |
+  | liver cirrhosis | occurs_together_in_literature_with | disorder of copper metabolism |  |
+  | liver cirrhosis | occurs_together_in_literature_with | Wilson disease |  |

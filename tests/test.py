@@ -108,7 +108,8 @@ async def run_loop_streaming(client: OpenAIClient, simple=False):
             }
         }
     else:
-        q = expand_yaml_template('tests/tool-call-2.yaml', ('instructions', 'tools'))
+        # q = expand_yaml_template('tests/tool-call-2.yaml', ('instructions', 'tools'))
+        q = expand_yaml_template('tests/ui-input.yaml', ('instructions', 'tools'))
         input = q['input']
         del q['input']
 
@@ -119,10 +120,7 @@ async def run_loop_streaming(client: OpenAIClient, simple=False):
 
     async for event in client.run_as_loop_streaming(input, q, fun_caller, 1, None, 10, 100):
         if event['type'] in ('message', 'reasoning'):
-            if event['done']:
-                print(f"{event['type']}: {event['output_text']}")
-            else:
-                pass
+            print(f"{event['type']}: {event['output_text']}")
         else:
             print(event)
 
